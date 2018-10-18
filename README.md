@@ -4,7 +4,7 @@ Package that you can use to zip items and folders with their internal files.
 
 ## Using
 
-```
+```javascript
 const zip-archiver = require('zip-archiver'); // Requiring zip-archiver package
 
 let archive_path = './out.zip'; // Path to the output archive
