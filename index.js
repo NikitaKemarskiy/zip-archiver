@@ -6,7 +6,8 @@ const fs = require('fs');
 // Functions
 const items_processing = { // Object that contains functions connected with proccesing the items (sorting, parsing etc.)
 
-	sort_items: function(items_array) { // Function that sorts the items in the special order (folders first, files second)
+	// Function that sorts the items in the special order (folders first, files second)
+	sort_items: function(items_array) { 
 
 		let items_array_sorted = []; // Array for items parsed in the special order
 
@@ -25,7 +26,8 @@ const items_processing = { // Object that contains functions connected with proc
 		return items_array_sorted; // Returning array of sorted items
 	},
 
-	parse_items: function(items_path, items) { // Function that parses files in a directory into an array with objects
+	// Function that parses files in a directory into an array with objects
+	parse_items: function(items_path, items) { 
 
 		let items_array = []; // Array for items
 		let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
@@ -69,7 +71,8 @@ const items_processing = { // Object that contains functions connected with proc
 				});
 			}
 
-			items_array_filled().then(function(items_array) { // After getting all the files stats -> sort it (folders first, files second)
+			// After getting all the files stats -> sort it (folders first, files second)
+			items_array_filled().then(function(items_array) { 
 				items_array_sorted = items_processing.sort_items(items_array);
 				resolve(items_array_sorted);
 			});
@@ -79,7 +82,8 @@ const items_processing = { // Object that contains functions connected with proc
 
 const items_counting = { // Object that contains functions connected with counting the items
 
-	count_items_to_zip: function(items_path, items) { // Function that counts a number of items to zip (including items inside the subfolders)
+	// Function that counts a number of items to zip (including items inside the subfolders)
+	count_items_to_zip: function(items_path, items) { 
 
 		let items_to_zip = 0; // A number of items to zip
 		let directories = []; // Array for pushing directories to count items inside of them later 
@@ -116,13 +120,14 @@ const items_counting = { // Object that contains functions connected with counti
 		});
 	},
 
-	count_items_in_directories: function(directories_path, directories) { // Function that counts a number of items inside folders to zip
+	// Function that counts a number of items inside folders to zip
+	count_items_in_directories: function(directories_path, directories) { 
 
 		let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
 		let items_in_directories = 0; // Variable that contains a number of items inside the folder to zip
 
 		return new Promise(function(resolve, reject) {
-
+			
 			for (let i = 0; i < directories.length; i++) {
 
 				let directory_path = path.join(directories_path, directories[i]); // Current folder path
@@ -130,13 +135,15 @@ const items_counting = { // Object that contains functions connected with counti
 				fs.readdir(directory_path, function(error, directory_items) { // Reading this folder
 					if (error) {
 						console.error(`Error: ${error.message}`);
-					} else {
-						items_counting.count_items_to_zip(directory_path, directory_items).then(function(result) { // Calling count items to zip functions inside the current folder
+					} else {	
+						// Calling count items to zip functions inside the current folder
+						items_counting.count_items_to_zip(directory_path, directory_items).then(function(result) { 
 
 							items_in_directories += result; // Incrementing a number of items inside the folder to zip
 							async_calls_counter++; // Incrementing an amount of async calls
 							
-							if (async_calls_counter >= directories.length) { // If it's the last needed call -> save a zip archive to the storage
+							// If it's the last needed call -> resolve with a number of items inside the folder
+							if (async_calls_counter >= directories.length) { 
 								resolve(items_in_directories);
 							}
 						});
@@ -149,10 +156,10 @@ const items_counting = { // Object that contains functions connected with counti
 
 const zip_processing = { // Object that contains functions connected with processing zip archive
 
-	generate_zip: function(zip, archive_path) { // Function that generates a zip archive
+	// Function that generates a zip archive
+	generate_zip: function(zip, archive_path) { 
 	
 		return new Promise(function(resolve, reject) {
-
 			zip.generateNodeStream({ type:'nodebuffer', streamFiles:true }) // Creating readable stream of zip 
 				.pipe(fs.createWriteStream(archive_path)) // Piping this stream to writable
 				.on('finish', function () { // Archive was created
@@ -161,7 +168,8 @@ const zip_processing = { // Object that contains functions connected with proces
 		});
 	},
 
-	add_directory_to_zip: function(directory, directory_path, items) { // Function that adds files inside some folder to archive
+	// Function that adds files inside some folder to archive
+	add_directory_to_zip: function(directory, directory_path, items) { 
 
 		let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
 
@@ -175,7 +183,8 @@ const zip_processing = { // Object that contains functions connected with proces
 						console.error(`Error: ${error.message}`);
 					} else {
 
-						items_counting.count_items_to_zip(directory_path, directory_items).then(function(items_to_zip) { // Calling count items to zip function to get a number of async calls
+						// Calling count items to zip function to get a number of async calls
+						items_counting.count_items_to_zip(directory_path, directory_items).then(function(items_to_zip) { 
 
 							items_processing.parse_items(directory_path, directory_items).then(function(items_parsed) {
 
@@ -185,12 +194,12 @@ const zip_processing = { // Object that contains functions connected with proces
 
 									if (items_parsed[i].type === 'file') { // Item is a file
 
-										fs.readFile(item_path, 'utf8', function(error, buffer) { // Read file from items array
+										fs.readFile(item_path, function(error, buffer) { // Read file from items array
 
 											if (error) {
 												console.error(`Error: ${error.message}`);
 											} else {
-												directory.file(items_parsed[i].name, buffer); // Inputing file into the zip archive
+												directory.file(items_parsed[i].name, buffer, { binary: true }); // Inputing file into the zip archive
 
 												async_calls_counter++; // Incrementing an amount of async calls
 
@@ -226,7 +235,8 @@ const zip_processing = { // Object that contains functions connected with proces
 				});
 			} else { // Items were passed -> add only these items inside zip archive
 
-				items_counting.count_items_to_zip(directory_path, items).then(function(items_to_zip) { // Calling count items to zip function to get a number of async calls
+				// Calling count items to zip function to get a number of async calls
+				items_counting.count_items_to_zip(directory_path, items).then(function(items_to_zip) { 
 
 					items_processing.parse_items(directory_path, items).then(function(items_parsed){ // Parsing items array
 
@@ -236,13 +246,13 @@ const zip_processing = { // Object that contains functions connected with proces
 
 							if (items_parsed[i].type === 'file') { // Item is a file
 
-								fs.readFile(item_path, 'utf8', function(error, buffer) { // Read file from items array
+								fs.readFile(item_path, function(error, buffer) { // Read file from items array
 									
 									if (error) {
 										console.error(`Error: ${error.message}`);
 									} else {
 
-										directory.file(items_parsed[i].name, buffer); // Inputing file into the zip archive
+										directory.file(items_parsed[i].name, buffer, { binary: true }); // Inputing file into the zip archive
 
 										async_calls_counter++; // Incrementing an amount of async calls
 
@@ -278,7 +288,8 @@ const zip_processing = { // Object that contains functions connected with proces
 		});
 	},
 
-	write_zip: function(items_path, items, archive_path) { // Function that creates zip archive
+	// Export function that initializes and creates a zip archive
+	write_zip: function(items_path, items, archive_path) { 
 
 		let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
 		let zip = new jszip();
@@ -295,5 +306,5 @@ const zip_processing = { // Object that contains functions connected with proces
 	}
 };
 
-// Export
+// Exports
 module.exports = zip_processing.write_zip;
