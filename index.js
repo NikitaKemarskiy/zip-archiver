@@ -1,7 +1,7 @@
 // Modules
 const jszip = require('jszip');
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 
 // Functions
 const items_processing = { // Object that contains functions connected with proccesing the items (sorting, parsing etc.)
@@ -149,65 +149,102 @@ const items_counting = { // Object that contains functions connected with counti
 
 const zip_processing = { // Object that contains functions connected with processing zip archive
 
-	generate_zip: function(zip, archive_name) { // Function that generates a zip archive
+	generate_zip: function(zip, archive_path) { // Function that generates a zip archive
 	
 		return new Promise(function(resolve, reject) {
 
 			zip.generateNodeStream({ type:'nodebuffer', streamFiles:true }) // Creating readable stream of zip 
-				.pipe(fs.createWriteStream(archive_name)) // Piping this stream to writable
+				.pipe(fs.createWriteStream(archive_path)) // Piping this stream to writable
 				.on('finish', function () { // Archive was created
-			    	resolve(`${archive_name} was written.`);
+			    	resolve(archive_path);
 				});	
 		});
 	},
 
-	add_to_zip_directory: function(directory_path, directory) { // Function that adds files inside some folder to archive
+	add_directory_to_zip: function(directory, directory_path, items) { // Function that adds files inside some folder to archive
 
 		let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
 
 		return new Promise(function(resolve, reject) {
 
-			fs.readdir(directory_path, function(error, directory_items) { // Reading the folder
-				
-				if (error) {
-					console.error(`Error: ${error.message}`);
-				} else {
+			if (items === undefined) { // If items aren't passed -> add all the items inside the directory to zip archive
 
-					items_counting.count_items_to_zip(directory_path, directory_items).then(function(items_to_zip) { // Calling count items to zip function to get a number of async calls
+				fs.readdir(directory_path, function(error, directory_items) { // Reading the folder
+					
+					if (error) {
+						console.error(`Error: ${error.message}`);
+					} else {
 
-						items_processing.parse_items(directory_path, directory_items).then(function(items_parsed) {
+						items_counting.count_items_to_zip(directory_path, directory_items).then(function(items_to_zip) { // Calling count items to zip function to get a number of async calls
 
-							for (let i = 0; i < items_parsed.length; i++) {
+							items_processing.parse_items(directory_path, directory_items).then(function(items_parsed) {
 
-								let item_path = path.join(directory_path, items_parsed[i].name); // File path
+								for (let i = 0; i < items_parsed.length; i++) {
 
-								if (items_parsed[i].type === 'file') { // Item is a file
+									let item_path = path.join(directory_path, items_parsed[i].name); // File path
 
-									fs.readFile(item_path, 'utf8', function(error, buffer) { // Read file from items array
+									if (items_parsed[i].type === 'file') { // Item is a file
 
-										if (error) {
-											console.error(`Error: ${error.message}`);
-										} else {
-											directory.file(items_parsed[i].name, buffer); // Inputing file into the zip archive
+										fs.readFile(item_path, 'utf8', function(error, buffer) { // Read file from items array
 
-											async_calls_counter++; // Incrementing an amount of async calls
+											if (error) {
+												console.error(`Error: ${error.message}`);
+											} else {
+												directory.file(items_parsed[i].name, buffer); // Inputing file into the zip archive
 
-											if (async_calls_counter >= items_to_zip) { // If it's the last needed call -> resolve a new directory
+												async_calls_counter++; // Incrementing an amount of async calls
+
+												if (async_calls_counter >= items_to_zip) { // If it's the last needed call -> resolve a new directory
+													resolve({
+														directory,
+														async_calls_counter
+													});
+												}
+											}
+										});
+									} else { // Item is a folder
+
+										let new_directory = directory.folder(items_parsed[i].name);
+
+										zip_processing.add_directory_to_zip(new_directory, item_path).then(function(result) {
+
+											new_directory = result.directory;
+											async_calls_counter += result.async_calls_counter + 1;
+
+											if (async_calls_counter >= items_to_zip) { // If it's the last needed call -> save a zip archive to the storage
 												resolve({
 													directory,
 													async_calls_counter
 												});
 											}
-										}
-									});
-								} else { // Item is a folder
+										});
+									}
+								}
+							});
+						});
+					}
+				});
+			} else { // Items were passed -> add only these items inside zip archive
 
-									let new_directory = directory.folder(items_parsed[i].name);
+				items_counting.count_items_to_zip(directory_path, items).then(function(items_to_zip) { // Calling count items to zip function to get a number of async calls
 
-									zip_processing.add_to_zip_directory(item_path, new_directory).then(function(result) {
+					items_processing.parse_items(directory_path, items).then(function(items_parsed){ // Parsing items array
 
-										new_directory = result.directory;
-										async_calls_counter += result.async_calls_counter + 1;
+						for (let i = 0; i < items_parsed.length; i++) {
+
+							let item_path = path.join(directory_path, items_parsed[i].name); // Current file path
+
+							if (items_parsed[i].type === 'file') { // Item is a file
+
+								fs.readFile(item_path, 'utf8', function(error, buffer) { // Read file from items array
+									
+									if (error) {
+										console.error(`Error: ${error.message}`);
+									} else {
+
+										directory.file(items_parsed[i].name, buffer); // Inputing file into the zip archive
+
+										async_calls_counter++; // Incrementing an amount of async calls
 
 										if (async_calls_counter >= items_to_zip) { // If it's the last needed call -> save a zip archive to the storage
 											resolve({
@@ -215,67 +252,43 @@ const zip_processing = { // Object that contains functions connected with proces
 												async_calls_counter
 											});
 										}
-									});
-								}
+									}
+								});
+							} else { // Item is a folder
+
+								let new_directory = directory.folder(items_parsed[i].name); // Inputing folder into the zip archive
+
+								zip_processing.add_directory_to_zip(new_directory, item_path).then(function(result) { // Reading all the files inside this folder and inputing them into it
+
+									new_directory = result.directory;
+									async_calls_counter += result.async_calls_counter + 1; // Increasing an amount of async calls
+
+									if (async_calls_counter >= items_to_zip) { // If it's the last needed call -> create a zip archive to the storage
+										resolve({
+											directory,
+											async_calls_counter
+										});
+									}
+								});
 							}
-						});
+						}
 					});
-				}
-			});
+				});
+			}
 		});
 	},
 
-	write_zip: function(items_path, items, archive_name) { // Function that creates zip archive
+	write_zip: function(items_path, items, archive_path) { // Function that creates zip archive
 
 		let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
 		let zip = new jszip();
 
 		return new Promise(function(resolve, reject) {
 
-			items_counting.count_items_to_zip(items_path, items).then(function(items_to_zip) { // Calling count items to zip function to get a number of async calls
-
-				items_processing.parse_items(items_path, items).then(function(items_parsed){ // Parsing items array
-
-					for (let i = 0; i < items_parsed.length; i++) {
-
-						let item_path = path.join(items_path, items_parsed[i].name); // Current file path
-
-						if (items_parsed[i].type === 'file') { // Item is a file
-
-							fs.readFile(item_path, 'utf8', function(error, buffer) { // Read file from items array
-								
-								if (error) {
-									console.error(`Error: ${error.message}`);
-								} else {
-
-									zip.file(items_parsed[i].name, buffer); // Inputing file into the zip archive
-
-									async_calls_counter++; // Incrementing an amount of async calls
-
-									if (async_calls_counter >= items_to_zip) { // If it's the last needed call -> save a zip archive to the storage
-										zip_processing.generate_zip(zip, archive_name).then(function(result) {
-											resolve(result);
-										});
-									}
-								}
-							});
-						} else { // Item is a folder
-
-							let directory = zip.folder(items_parsed[i].name); // Inputing folder into the zip archive
-
-							zip_processing.add_to_zip_directory(item_path, directory).then(function(result) { // Reading all the files inside this folder and inputing them into it
-
-								directory = result.directory;
-								async_calls_counter += result.async_calls_counter + 1; // Increasing an amount of async calls
-
-								if (async_calls_counter >= items_to_zip) { // If it's the last needed call -> create a zip archive to the storage
-									zip_processing.generate_zip(zip, archive_name).then(function(result) {
-										resolve(result);
-									});
-								}
-							});
-						}
-					}
+			zip_processing.add_directory_to_zip(zip, items_path, items).then(function(result) { // Calling add directory to zip function for the items folder
+				zip = result.directory;
+				zip_processing.generate_zip(zip, archive_path).then(function(result) {
+					resolve(result);
 				});
 			});
 		});
