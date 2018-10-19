@@ -29,12 +29,12 @@ const items_processing = { // Object that contains functions connected with proc
 	// Function that parses files in a directory into an array with objects
 	parse_items: function(items_path, items) { 
 
-		let items_array = []; // Array for items
-		let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
-
 		return new Promise(function(resolve, reject) {
 
 			const items_array_filled = function() { // Promise function for filling the items array 
+
+				let items_array = []; // Array for items
+				let async_calls_counter = 0; // Variable that contains a number of async calls into the loop
 
 				return new Promise(function(resolve, reject) {
 
